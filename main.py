@@ -52,6 +52,10 @@ class Game(object):
         self.canvas.after(300, self.animation)
 
     def move_bullets(self):
+        bullettouchedAlien = self.fleet.manage_touched_aliens_by(self.canvas, self.defender)
+        if bullettouchedAlien != -1:
+            self.canvas.delete(bullettouchedAlien.id)
+            self.defender.fired_bullets.remove(bullettouchedAlien)
         for bullets in self.defender.fired_bullets:
             #returned : tuple with the object bullet and a boolean = True if the bullet is out of the canvas
             toDelete = bullets.move_in(self.canvas)
@@ -89,6 +93,7 @@ class Defender(object):
         canvas.move(self.id, dx, 0)
 
     def fire(self, canvas):
+
         if(len(self.fired_bullets) < 8):
             self.fired_bullets.append(Bullet(self))
             self.fired_bullets[-1].install_in(canvas)
@@ -102,15 +107,14 @@ class Bullet(object):
         self.shooter = shooter
 
     def install_in(self, canvas):
-        x = canvas.coords(self.shooter.id)[0]
-        y = canvas.coords(self.shooter.id)[1] -  self.shooter.height
-        x1 = canvas.coords(self.shooter.id)[2]
-        y1 = canvas.coords(self.shooter.id)[3] - self.shooter.height
-        self.id=canvas.create_oval(x, y, x1, y1, fill = self.color)
+        # x, y = middle of the ball and located on top of the defender
+        x = canvas.coords(self.shooter.id)[0] + self.shooter.width/2
+        y = canvas.coords(self.shooter.id)[1] - self.radius
+        self.id=canvas.create_oval(x-self.radius, y-self.radius, x+self.radius, y+self.radius, fill = self.color)
 
     def move_in(self, canvas):
         canvas.move(self.id, 0, -5)
-        if canvas.coords(self.id)[3] <= 0:
+        if canvas.coords(self.id)[3] <= 0: # if bullet out of the frame
             return(self, True)
         else:
             return(self,False)
@@ -143,26 +147,33 @@ class Fleet(object):
                 x_img = self.alien_x_delta+((self.aliens_inner_gap+img_width)*x)
                 y_img = self.alien_y_delta+((self.aliens_inner_gap+img_heigth)*y)
 
-                self.aliens_fleet[-1].install_in(canvas,x_img,y_img,image,"alien"+str(id))
+                self.aliens_fleet[-1].install_in(canvas,x_img,y_img,image,"alien")
                 id+=1
 
 
     def move_in(self, canvas):
-        #print(str(canvas.bbox(49)))
-        decale = 0
-        last_droite_y = canvas.bbox("alien"+str(self.fleet_size-1))[-1] # bottom right alien (coord y1)
-        last_gauche_y = canvas.bbox("alien"+str(self.fleet_size-self.aliens_columns))[1]# bottom left alien (coord y)
-        last_droite_x = canvas.bbox("alien"+str(self.fleet_size-1))[-2] #bottom right alien (coord x1)
-        last_gauche_x = canvas.bbox("alien"+str(self.fleet_size-self.aliens_columns))[0]#bottom left alien (coord x)
-        if(last_droite_x >= int(canvas.cget("width")) or last_gauche_x < 0):
-            self.speed = -self.speed
-            decale = 30
+        decale = 0 # if the fleet is on an edge decale = 30 and all aliens go down
+        self.xfleet,self.yfleet,self.x1fleet,self.y1fleet  = canvas.bbox("alien") #Coords of the fleet
+        if(self.x1fleet >= int(canvas.cget("width")) or self.xfleet < 0): # if we are on an edge
+            self.speed = -self.speed #reverse
+            decale = 30 # go down
         for alien in self.aliens_fleet:
             alien.move_in(canvas, self.speed, decale)
 
 
     def manage_touched_aliens_by(self,canvas,defender):
-        print("TODO")
+        for bullets in defender.fired_bullets:
+            bx,by,b1x,b1y = canvas.coords(bullets.id)
+            # se trouve dans la flotte
+            overlapped = canvas.find_overlapping(bx, by, b1x, b1y)
+            # if the bullet touches an alien and it's not the defender
+            if (len(overlapped) == 2 and overlapped[0] != 1):
+                for alien in self.aliens_fleet:
+                    if alien.id == overlapped[0] and alien.alive == True:
+                        alien.touched_by(canvas, bullets)
+                        return bullets
+        return -1
+
 
 class Alien(object):
 
@@ -171,7 +182,10 @@ class Alien(object):
         self.alive = True
 
     def touched_by(self, canvas, projectile):
-        print("TODO")
+        self.alive = False
+        canvas.delete(self.id)
+        print("alien " + str(self.id) + " touché !")
+        #remove the alien pic
 
     def install_in(self, canvas, x, y, image, tag):
         #load the picture
