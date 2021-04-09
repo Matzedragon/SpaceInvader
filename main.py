@@ -30,6 +30,7 @@ class Game(object):
         #self.iColor = 0
         self.frame = frame
         self.fleet = Fleet()
+        self.status = 0 # game playing, if 1 = win if -1 = lost
         self.height = 900
         self.width  = 1600
         #self.width = self.fleet.get_width()
@@ -42,8 +43,13 @@ class Game(object):
     def animation(self):
         #self.canvas.configure(bg=self.color[self.iColor])
         #self.iColor=(self.iColor +1)%6
-        self.move_bullets()
-        self.move_aliens_fleet()
+        if(self.status == 0):
+            self.move_bullets()
+            self.move_aliens_fleet()
+        elif(self.status == -1):
+            print("lose")
+        elif(self.status == 1):
+            print("win")
         self.canvas.after(10, self.animation)
 
     def start_animation(self):
@@ -54,16 +60,21 @@ class Game(object):
     def move_bullets(self):
         bullettouchedAlien = self.fleet.manage_touched_aliens_by(self.canvas, self.defender)
         if bullettouchedAlien != -1:
-            self.canvas.delete(bullettouchedAlien.id)
-            self.defender.fired_bullets.remove(bullettouchedAlien)
-        for bullets in self.defender.fired_bullets:
+            self.canvas.delete(bullettouchedAlien.getId())
+            self.defender.getFired_bullets().remove(bullettouchedAlien)
+        for bullets in self.defender.getFired_bullets():
             #returned : tuple with the object bullet and a boolean = True if the bullet is out of the canvas
             toDelete = bullets.move_in(self.canvas)
             if toDelete[1]:
-                self.defender.fired_bullets.remove(toDelete[0])
+                #self.canvas.delete(toDelete[0].getId())
+                self.defender.getFired_bullets().remove(toDelete[0])
 
     def move_aliens_fleet(self):
-        self.fleet.move_in(self.canvas)
+        status = self.fleet.move_in(self.canvas)
+        if status ==  -1:
+            self.status = -1
+        elif status == 1:
+            self.status = 0
 
     def keypress(self, event):
         if event.keysym == 'Left':
@@ -93,10 +104,18 @@ class Defender(object):
         canvas.move(self.id, dx, 0)
 
     def fire(self, canvas):
-
         if(len(self.fired_bullets) < 8):
             self.fired_bullets.append(Bullet(self))
             self.fired_bullets[-1].install_in(canvas)
+
+    def getFired_bullets(self):
+        return self.fired_bullets
+
+    def getId(self):
+        return self.id
+
+    def getWidth(self):
+        return self.width
 
 class Bullet(object):
     def __init__(self, shooter):
@@ -108,16 +127,19 @@ class Bullet(object):
 
     def install_in(self, canvas):
         # x, y = middle of the ball and located on top of the defender
-        x = canvas.coords(self.shooter.id)[0] + self.shooter.width/2
-        y = canvas.coords(self.shooter.id)[1] - self.radius
+        x = canvas.coords(self.shooter.getId())[0] + self.shooter.getWidth()/2
+        y = canvas.coords(self.shooter.getId())[1] - self.radius
         self.id=canvas.create_oval(x-self.radius, y-self.radius, x+self.radius, y+self.radius, fill = self.color)
 
     def move_in(self, canvas):
-        canvas.move(self.id, 0, -5)
+        canvas.move(self.id, 0, -self.speed)
         if canvas.coords(self.id)[3] <= 0: # if bullet out of the frame
             return(self, True)
         else:
             return(self,False)
+
+    def getId(self):
+        return self.id
 
 class Fleet(object):
     def __init__(self):
@@ -146,7 +168,6 @@ class Fleet(object):
                 # y_img = starting position + (gap + img_size)* the number of line of aliens
                 x_img = self.alien_x_delta+((self.aliens_inner_gap+img_width)*x)
                 y_img = self.alien_y_delta+((self.aliens_inner_gap+img_heigth)*y)
-
                 self.aliens_fleet[-1].install_in(canvas,x_img,y_img,image,"alien")
                 id+=1
 
@@ -159,33 +180,43 @@ class Fleet(object):
             decale = 30 # go down
         for alien in self.aliens_fleet:
             alien.move_in(canvas, self.speed, decale)
+        # if the fleet reaches the defender
+        if self.y1fleet > int(canvas.cget("height"))-50:
+            return -1
 
 
     def manage_touched_aliens_by(self,canvas,defender):
-        for bullets in defender.fired_bullets:
-            bx,by,b1x,b1y = canvas.coords(bullets.id)
+        for bullets in defender.getFired_bullets():
+            bx,by,b1x,b1y = canvas.coords(bullets.getId())
             # se trouve dans la flotte
             overlapped = canvas.find_overlapping(bx, by, b1x, b1y)
             # if the bullet touches an alien and it's not the defender
             if (len(overlapped) == 2 and overlapped[0] != 1):
                 for alien in self.aliens_fleet:
-                    if alien.id == overlapped[0] and alien.alive == True:
+                    if alien.getId() == overlapped[0] and alien.getAlive() == True:
                         alien.touched_by(canvas, bullets)
                         return bullets
         return -1
 
+    def getId(self):
+        return self.id
 
 class Alien(object):
 
     def __init__(self):
+        self.alien = None
         self.id = None
         self.alive = True
 
     def touched_by(self, canvas, projectile):
+        #change the image to explosion
+        # TODO find a way to delay the removal of the alien of at least a way for the explosion to last
+        self.alien = tk.PhotoImage(file="images/explosion.gif")
+        canvas.itemconfig(self.id, image = self.alien)
         self.alive = False
-        canvas.delete(self.id)
-        print("alien " + str(self.id) + " touché !")
-        #remove the alien pic
+        #remove the alien
+        self.deleteAlien(canvas)
+
 
     def install_in(self, canvas, x, y, image, tag):
         #load the picture
@@ -197,5 +228,13 @@ class Alien(object):
 
     def move_in(self, canvas, dx, dy):
         canvas.move(self.id,dx,dy)
+
+    def deleteAlien(self, canvas):
+        canvas.delete(self.id)
+
+    def getId(self):
+        return self.id
+    def getAlive(self):
+        return self.alive
 
 SpaceInvaders().play()
