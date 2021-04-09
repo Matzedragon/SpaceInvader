@@ -26,14 +26,13 @@ class SpaceInvaders(object):
 
 class Game(object):
     def __init__(self, frame):
-        #self.color = ["red","blue","green","white","yellow","purple","pink"]
-        #self.iColor = 0
         self.frame = frame
         self.fleet = Fleet()
+        self.score = 0
+        self.textElements = []
         self.status = 0 # game playing, if 1 = win if -1 = lost
         self.height = 900
         self.width  = 1600
-        #self.width = self.fleet.get_width()
         self.canvas = tk.Canvas(self.frame, width=self.width, height=self.height, background="black")
         self.canvas.pack()
         self.defender = Defender()
@@ -47,9 +46,9 @@ class Game(object):
             self.move_bullets()
             self.move_aliens_fleet()
         elif(self.status == -1):
-            print("lose")
+            self.addtext(self.width/2,self.height/2, "Game over:\n you Lost", 30)
         elif(self.status == 1):
-            print("win")
+            self.addtext(self.width/2,self.height/2, "Game over:\n you Won", 50)
         self.canvas.after(10, self.animation)
 
     def start_animation(self):
@@ -74,7 +73,7 @@ class Game(object):
         if status ==  -1:
             self.status = -1
         elif status == 1:
-            self.status = 0
+            self.status = 1
 
     def keypress(self, event):
         if event.keysym == 'Left':
@@ -83,6 +82,10 @@ class Game(object):
             self.defender.move_in(self.canvas,10)
         elif event.keysym == 'space':
             self.defender.fire(self.canvas)
+
+    def addtext(self, x, y, text, size):
+        # add the text id to the array so we can modify it / hide it /delete it later if needed
+        self.textElements.append(self.canvas.create_text(x, y, text=text, fill="white",font=("Purisa", size)))
 
 
 class Defender(object):
@@ -160,7 +163,6 @@ class Fleet(object):
         img_width = self.alien.width()
         img_heigth = self.alien.height()
         id = 0
-        print(str(img_heigth) + " = image height")
         for y in range(self.aliens_lines):
             for x in range(self.aliens_columns):
                 self.aliens_fleet.append(Alien())
@@ -173,6 +175,9 @@ class Fleet(object):
 
 
     def move_in(self, canvas):
+        #no more Alien, game won
+        if(self.fleet_size <= 0):
+            return 1
         decale = 0 # if the fleet is on an edge decale = 30 and all aliens go down
         self.xfleet,self.yfleet,self.x1fleet,self.y1fleet  = canvas.bbox("alien") #Coords of the fleet
         if(self.x1fleet >= int(canvas.cget("width")) or self.xfleet < 0): # if we are on an edge
@@ -180,7 +185,7 @@ class Fleet(object):
             decale = 30 # go down
         for alien in self.aliens_fleet:
             alien.move_in(canvas, self.speed, decale)
-        # if the fleet reaches the defender
+        # if the fleet reaches the defender game lost
         if self.y1fleet > int(canvas.cget("height"))-50:
             return -1
 
@@ -195,11 +200,15 @@ class Fleet(object):
                 for alien in self.aliens_fleet:
                     if alien.getId() == overlapped[0] and alien.getAlive() == True:
                         alien.touched_by(canvas, bullets)
+                        self.fleet_size -=1
                         return bullets
         return -1
 
     def getId(self):
         return self.id
+
+    def getFleet_size(self):
+        return self.fleet_size
 
 class Alien(object):
 
@@ -236,5 +245,17 @@ class Alien(object):
         return self.id
     def getAlive(self):
         return self.alive
+
+class TexteVC(object):
+
+    def show(self, canvas):
+        if(not self.visible):
+            canvas.itemconfig(self.id, state = 'active')
+            self.visible = 0
+
+    def hide(self, canvas):
+        if(self.visible):
+            canvas.itemconfig(self.id, state="hidden")
+            self.visible = 1
 
 SpaceInvaders().play()
