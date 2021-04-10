@@ -28,7 +28,7 @@ class Game(object):
     def __init__(self, frame):
         self.frame = frame
         self.fleet = Fleet()
-        self.score = 0
+        self.score = Score()
         self.textElements = []
         self.status = 0 # game playing, if 1 = win if -1 = lost
         self.height = 900
@@ -38,6 +38,7 @@ class Game(object):
         self.defender = Defender()
         self.defender.install_in(self.canvas)
         self.fleet.install_in(self.canvas)
+        self.score.getScoresFromFile("scores.txt")
 
     def animation(self):
         #self.canvas.configure(bg=self.color[self.iColor])
@@ -87,6 +88,9 @@ class Game(object):
         # add the text id to the array so we can modify it / hide it /delete it later if needed
         self.textElements.append(self.canvas.create_text(x, y, text=text, fill="white",font=("Purisa", size)))
 
+class Panneau(object):
+    def __init__(self):
+        print("TODO")
 
 class Defender(object):
     def __init__(self):
@@ -219,12 +223,11 @@ class Alien(object):
 
     def touched_by(self, canvas, projectile):
         #change the image to explosion
-        # TODO find a way to delay the removal of the alien of at least a way for the explosion to last
         self.alien = tk.PhotoImage(file="images/explosion.gif")
         canvas.itemconfig(self.id, image = self.alien)
         self.alive = False
         #remove the alien
-        self.deleteAlien(canvas)
+        canvas.after(60,self.deleteAlien, canvas)
 
 
     def install_in(self, canvas, x, y, image, tag):
@@ -257,5 +260,58 @@ class TexteVC(object):
         if(self.visible):
             canvas.itemconfig(self.id, state="hidden")
             self.visible = 1
+
+# object to manage scores before, during and after the game
+class Score(object):
+    def __init__(self):
+        self.currentScore = 0
+        self.currentUser = ""
+        self.allScores = {}
+
+    #affiche le score du joueur actuel
+    def install_in(self):
+        print("TODO")
+
+    def getScore(self):
+        return self.score
+
+    def getUser(self):
+        return self.user
+
+    def addScore(self, points):
+        self.score += points
+
+    def chooseUser(self, name):
+        if name in self.allScores:
+            self.currentScore = self.allScores[name]
+        self.currentUser = name
+
+    def saveScore(self,file):
+        f= open(file,"r")
+        content =""
+        if self.currentUser in self.allScores:
+            for line in f:
+                #getting the line with the current user
+                if self.currentUser in line:
+                    content += self.currentUser + " " + str(self.currentScore) +"\n"
+                else:
+                    content += line+"\n"
+        reading_file.close()
+        wf = open(file, "w")
+        wf.write(content)
+        #if new user
+        if self.currentUser not in self.allScores:
+            wf.write(self.currentUser + " " + str(self.currentScore) + "\n")
+        wf.close()
+
+    def getScoresFromFile(self,file):
+        f= open(file,"r")
+        lines = f.readlines()
+        #for each lines in the txtfile
+        for l in lines:
+            #split on spaces
+            temp = l.split()
+            #goes into the dic like {"name" : score}
+            self.allScores[temp[0]] = temp[1]
 
 SpaceInvaders().play()
