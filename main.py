@@ -8,7 +8,7 @@ except:
     import Tkinter as tk
     import tkMessageBox
 
-
+# MAIN class, create the window components
 class SpaceInvaders(object):
     '''
     Main Game class
@@ -18,18 +18,74 @@ class SpaceInvaders(object):
         self.root.title("Space Invaders")
         self.frame = tk.Frame(self.root)
         self.frame.pack()
-        self.game = Game(self.frame)
+        self.scoreboard = scoreBoard(self)
+        self.scoreboard.printscoreboard()
+        self.game =None
+
+    def getFrame(self):
+        return self.frame
+
+    def getRoot(self):
+        return self.root
 
     def play(self):
-        self.game.start_animation()
         self.root.mainloop()
 
+    #switch from the scoreboard to the game
+    def switchToGame(self, score):
+        self.game = Game(self.frame, score)
+        self.game.start_animation()
+
+class scoreBoard(object):
+    def __init__(self,main):
+        self.main = main
+        self.newUser = tk.StringVar()
+        self.newUser_entry = tk.Entry(main.getFrame(),textvariable = self.newUser, font=('calibre',10))
+        self.sb = Resultat()
+        self.sb.fromFile("scores.txt")
+        #array to delete all paacked elements when the game starts
+        self.packed = []
+
+    def submit(self):
+        newScore = Score(self.newUser.get(),0)
+        self.unpackall()
+        self.main.switchToGame(newScore)
+
+    def submitold(self, oldscore):
+        #the user already exists we reset his score to 0 for now
+        oldscore = Score(oldscore.getUser(),0)
+        self.unpackall()
+        self.main.switchToGame(oldscore)
+
+    def printscoreboard(self):
+        i = 0
+        for scores in self.sb.getListeScores():
+            scoreprt = scores.getUser() + " " + scores.getScore()
+            temp = tk.Label(self.main.getFrame(), text=scoreprt)
+            #if user choose already existing user
+            bouton = tk.Button(self.main.getFrame(), text="choose", command=lambda i=i: self.submitold(self.sb.getListeScores()[i]))
+            temp.pack()
+            bouton.pack()
+            self.packed.append(temp)
+            self.packed.append(bouton)
+            i+=1
+        self.newUser_entry.pack()
+        self.packed.append(self.newUser_entry)
+        sub_btn=tk.Button(self.main.getFrame(),text = 'Nouvel utilisateur', command = self.submit)
+        sub_btn.pack()
+        self.packed.append(sub_btn)
+
+    def unpackall(self):
+        list = self.main.getRoot().pack_slaves()
+        for l in self.packed:
+            l.destroy()
+
 class Game(object):
-    def __init__(self, frame):
+    def __init__(self, frame, score):
         self.frame = frame
         self.fleet = Fleet()
-        self.score = Score()
         self.textElements = []
+        self.score = score
         self.status = 0 # game playing, if 1 = win if -1 = lost
         self.height = 900
         self.width  = 1600
@@ -38,19 +94,18 @@ class Game(object):
         self.defender = Defender()
         self.defender.install_in(self.canvas)
         self.fleet.install_in(self.canvas)
-        self.score.getScoresFromFile("scores.txt")
 
     def animation(self):
-        #self.canvas.configure(bg=self.color[self.iColor])
-        #self.iColor=(self.iColor +1)%6
         if(self.status == 0):
             self.move_bullets()
             self.move_aliens_fleet()
+            self.canvas.after(10, self.animation)
         elif(self.status == -1):
-            self.addtext(self.width/2,self.height/2, "Game over:\n you Lost", 30)
+            self.addtext(self.width/2,self.height/2, "Game over, you Lost\n Score: " + str(self.score.getScore()), 30)
+            self.saveScore()
         elif(self.status == 1):
-            self.addtext(self.width/2,self.height/2, "Game over:\n you Won", 50)
-        self.canvas.after(10, self.animation)
+            self.addtext(self.width/2,self.height/2, "Game over, you Won\n Score: " + str(self.score.getScore()), 30)
+            self.saveScore()
 
     def start_animation(self):
         self.frame.focus_set()
@@ -60,13 +115,13 @@ class Game(object):
     def move_bullets(self):
         bullettouchedAlien = self.fleet.manage_touched_aliens_by(self.canvas, self.defender)
         if bullettouchedAlien != -1:
+            self.score.addScore(10)
             self.canvas.delete(bullettouchedAlien.getId())
             self.defender.getFired_bullets().remove(bullettouchedAlien)
         for bullets in self.defender.getFired_bullets():
             #returned : tuple with the object bullet and a boolean = True if the bullet is out of the canvas
             toDelete = bullets.move_in(self.canvas)
             if toDelete[1]:
-                #self.canvas.delete(toDelete[0].getId())
                 self.defender.getFired_bullets().remove(toDelete[0])
 
     def move_aliens_fleet(self):
@@ -88,9 +143,11 @@ class Game(object):
         # add the text id to the array so we can modify it / hide it /delete it later if needed
         self.textElements.append(self.canvas.create_text(x, y, text=text, fill="white",font=("Purisa", size)))
 
-class Panneau(object):
-    def __init__(self):
-        print("TODO")
+    def saveScore(self):
+        resultat = Resultat()
+        resultat.fromFile("scores.txt")
+        resultat.addScore(self.score)
+        resultat.toFile("scores.txt")
 
 class Defender(object):
     def __init__(self):
@@ -104,13 +161,17 @@ class Defender(object):
     def install_in(self, canvas):
         x = int(canvas.cget("width"))
         y = int(canvas.cget("height"))-self.height
+        #create the defender in the center of the canvas
         self.id = canvas.create_rectangle(x/2,y , x/2+self.width, y+self.height, fill="red")
 
 
     def move_in(self,canvas, dx):
-        canvas.move(self.id, dx, 0)
+        #if the defender is in the canvas
+        if(canvas.coords(self.id)[-2] < int(canvas.cget("width")) and canvas.coords(self.id)[0]>0):
+            canvas.move(self.id, dx, 0)
 
     def fire(self, canvas):
+        #if less than 8 bullets exist
         if(len(self.fired_bullets) < 8):
             self.fired_bullets.append(Bullet(self))
             self.fired_bullets[-1].install_in(canvas)
@@ -136,12 +197,13 @@ class Bullet(object):
         # x, y = middle of the ball and located on top of the defender
         x = canvas.coords(self.shooter.getId())[0] + self.shooter.getWidth()/2
         y = canvas.coords(self.shooter.getId())[1] - self.radius
+        #create a bullet on top of the defender with the radius wanted
         self.id=canvas.create_oval(x-self.radius, y-self.radius, x+self.radius, y+self.radius, fill = self.color)
 
     def move_in(self, canvas):
         canvas.move(self.id, 0, -self.speed)
         if canvas.coords(self.id)[3] <= 0: # if bullet out of the frame
-            return(self, True)
+            return(self, True) #return the bullet and a boolean to delete it
         else:
             return(self,False)
 
@@ -197,7 +259,7 @@ class Fleet(object):
     def manage_touched_aliens_by(self,canvas,defender):
         for bullets in defender.getFired_bullets():
             bx,by,b1x,b1y = canvas.coords(bullets.getId())
-            # se trouve dans la flotte
+            # find if the bullet is in the fleet area
             overlapped = canvas.find_overlapping(bx, by, b1x, b1y)
             # if the bullet touches an alien and it's not the defender
             if (len(overlapped) == 2 and overlapped[0] != 1):
@@ -206,6 +268,7 @@ class Fleet(object):
                         alien.touched_by(canvas, bullets)
                         self.fleet_size -=1
                         return bullets
+        #touches nothing
         return -1
 
     def getId(self):
@@ -249,69 +312,55 @@ class Alien(object):
     def getAlive(self):
         return self.alive
 
-class TexteVC(object):
-
-    def show(self, canvas):
-        if(not self.visible):
-            canvas.itemconfig(self.id, state = 'active')
-            self.visible = 0
-
-    def hide(self, canvas):
-        if(self.visible):
-            canvas.itemconfig(self.id, state="hidden")
-            self.visible = 1
-
 # object to manage scores before, during and after the game
 class Score(object):
-    def __init__(self):
-        self.currentScore = 0
-        self.currentUser = ""
-        self.allScores = {}
-
-    #affiche le score du joueur actuel
-    def install_in(self):
-        print("TODO")
+    def __init__(self, user, score):
+        self.currentScore = score
+        self.currentUser = user
 
     def getScore(self):
-        return self.score
+        return self.currentScore
 
     def getUser(self):
-        return self.user
+        return self.currentUser
+
+    def setScore(self, value):
+        self.currentScore =value
 
     def addScore(self, points):
-        self.score += points
+        self.currentScore += points
 
-    def chooseUser(self, name):
-        if name in self.allScores:
-            self.currentScore = self.allScores[name]
-        self.currentUser = name
+class Resultat(object):
+    def __init__(self):
+        self.listeScores = []
 
-    def saveScore(self,file):
-        f= open(file,"r")
-        content =""
-        if self.currentUser in self.allScores:
-            for line in f:
-                #getting the line with the current user
-                if self.currentUser in line:
-                    content += self.currentUser + " " + str(self.currentScore) +"\n"
-                else:
-                    content += line+"\n"
-        reading_file.close()
-        wf = open(file, "w")
-        wf.write(content)
-        #if new user
-        if self.currentUser not in self.allScores:
-            wf.write(self.currentUser + " " + str(self.currentScore) + "\n")
-        wf.close()
+    def addScore(self,score):
+        alreadyexist = 1
+        for user in self.listeScores:
+            if score.getUser() == user.getUser():
+                user.setScore(score.getScore())
+                alreadyexist = 0
+                break;
+        if alreadyexist == 1:
+            self.listeScores.append(score)
 
-    def getScoresFromFile(self,file):
+    def getListeScores(self):
+        return self.listeScores
+
+    def toFile(self,file):
+        f=open(file,"w")
+        for player in self.listeScores:
+            f.write(player.getUser() + " " + str(player.getScore()) + "\n")
+
+    def fromFile(self,file):
         f= open(file,"r")
         lines = f.readlines()
         #for each lines in the txtfile
         for l in lines:
             #split on spaces
             temp = l.split()
-            #goes into the dic like {"name" : score}
-            self.allScores[temp[0]] = temp[1]
+            #append the list with an objet score(user,score)
+            self.listeScores.append(Score(temp[0],temp[1]))
+
 
 SpaceInvaders().play()
